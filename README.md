@@ -1,73 +1,271 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="200" alt="Nest Logo" /></a>
-</p>
+# 🚀 Token Management Service
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+## 📖 Overview
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://coveralls.io/github/nestjs/nest?branch=master" target="_blank"><img src="https://coveralls.io/repos/github/nestjs/nest/badge.svg?branch=master#9" alt="Coverage" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+This is a scalable **Token Management Service** built with **NestJS** and **Redis**, designed to efficiently generate, assign, unblock, and manage unique tokens with auto-expiry mechanisms.
 
-## Description
+### 🎯 **Key Features**
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+✅ Assigns unique tokens dynamically with **O(1) operations**  
+✅ Supports **multi-instance deployments** using **Redis Pub/Sub**  
+✅ Implements **event-driven token unblocking after 2 minutes**  
+✅ Ensures **scalability and consistency** across multiple application pods  
+✅ Deployable in **Docker & Kubernetes** environments  
 
-## Installation
+---
 
-```bash
-$ yarn install
+## 🛠️ **Tech Stack**
+
+| Component       | Technology    |
+|----------------|--------------|
+| **Backend**    | NestJS (TypeScript) |
+| **Database**   | Redis (Atomic Operations, Pub/Sub) |
+| **Event Bus**  | Redis Pub/Sub (Token Expiry) |
+| **Containerization** | Docker & Kubernetes |
+| **Monitoring** | Prometheus & Grafana |
+| **Load Balancer** | NGINX / Kubernetes Service |
+
+---
+
+## 🏗️ **System Architecture**
+
+```
+        ┌────────────────────────────────┐
+        │      API Gateway (NestJS)      │
+        ├────────────────────────────────┤
+        │      Token Service (NestJS)    │
+        │  ┌─────────────────────────┐   │
+        │  │     Redis Database      │   │
+        │  │  - Token Storage        │   │
+        │  │  - Auto-Expiry Handling │   │
+        │  │  - Pub/Sub Notifications│   │
+        │  └─────────────────────────┘   │
+        ├────────────────────────────────┤
+        │        Other Services          │
+        │  (Auth, Logging, Monitoring)   │
+        └────────────────────────────────┘
 ```
 
-## Running the app
+---
 
-```bash
-# development
-$ yarn run start
+## 🚀 **Setup & Installation**
 
-# watch mode
-$ yarn run start:dev
+### **1️⃣ Clone the Repository**
 
-# production mode
-$ yarn run start:prod
+```sh
+git clone https://github.com/your-repo/token-management-service.git
+cd token-management-service
 ```
 
-## Test
+### **2️⃣ Install Dependencies**
 
-```bash
-# unit tests
-$ yarn run test
-
-# e2e tests
-$ yarn run test:e2e
-
-# test coverage
-$ yarn run test:cov
+```sh
+yarn install
 ```
 
-## Support
+### **3️⃣ Set Up Environment Variables**
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+Create a `.env` file in the root directory:
 
-## Stay in touch
+```ini
+PORT=3000
+REDIS_URL=redis://localhost:6379
+TOKEN_LIFETIME=60    # Tokens expire after 60s
+KEEP_ALIVE_LIMIT=300  # Keep-alive max timeout in seconds
+```
 
-- Author - [Kamil Myśliwiec](https://kamilmysliwiec.com)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+### **4️⃣ Start Redis Locally**
 
-## License
+Ensure Redis is running locally:
 
-Nest is [MIT licensed](LICENSE).
+```sh
+docker run -d --name redis -p 6379:6379 redis
+```
+
+### **5️⃣ Run the Application**
+
+```sh
+yarn start:dev
+```
+
+---
+
+## 🔥 **API Endpoints**
+
+### **1️⃣ Generate Tokens**
+
+```http
+POST /tokens/generate
+```
+
+**Request Body:**
+
+```json
+{
+  "count": 10
+}
+```
+
+**Response:**
+
+```json
+{
+  "tokens": ["abc123", "def456"]
+}
+```
+
+### **2️⃣ Assign a Token**
+
+```http
+POST /tokens/assign
+```
+
+**Response:**
+
+```json
+{
+  "token": "abc123"
+}
+```
+
+### **3️⃣ Unblock a Token (Available after 2 minutes)**
+
+```http
+POST /tokens/unblock
+```
+
+**Request Body:**
+
+```json
+{
+  "token": "abc123"
+}
+```
+
+### **4️⃣ Delete a Token**
+
+```http
+DELETE /tokens/delete
+```
+
+**Request Body:**
+
+```json
+{
+  "token": "abc123"
+}
+```
+
+### **5️⃣ Keep Token Alive (Prevent Expiry)**
+
+```http
+POST /tokens/keep-alive
+```
+
+**Request Body:**
+
+```json
+{
+  "token": "abc123"
+}
+```
+
+---
+
+## ⚙ **Deployment**
+
+### **🚀 Deploy with Docker**
+
+```sh
+docker build -t token-service .
+docker run -p 3000:3000 --env-file .env token-service
+```
+
+### **🚀 Deploy on Kubernetes**
+
+1️⃣ **Create Deployment YAML (`deployment.yaml`)**:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: token-service
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: token-service
+  template:
+    metadata:
+      labels:
+        app: token-service
+    spec:
+      containers:
+      - name: token-service
+        image: token-service:latest
+        ports:
+        - containerPort: 3000
+        env:
+        - name: REDIS_URL
+          value: "redis://redis-cluster:6379"
+```
+
+2️⃣ **Apply the Kubernetes Deployment**
+
+```sh
+kubectl apply -f deployment.yaml
+```
+
+3️⃣ **Expose the Service**
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: token-service
+spec:
+  type: LoadBalancer
+  selector:
+    app: token-service
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 3000
+```
+
+```sh
+kubectl apply -f service.yaml
+```
+
+---
+
+## 🎯 **Scaling Strategy**
+
+✅ **Redis Atomic Operations** → Prevents race conditions  
+✅ **Redis Pub/Sub** → Ensures event-driven consistency  
+✅ **Kubernetes Auto-Scaling** → Deploys multiple instances as needed  
+
+---
+
+## 🎯 **Future Enhancements**
+
+✅ Implement **Rate Limiting** using API Gateway  
+✅ Support **JWT Authentication** for secured access  
+✅ Add **Kafka or RabbitMQ** for distributed messaging  
+✅ Improve monitoring using **Prometheus & Grafana**  
+✅ Configure Redis to run in **cluster mode** for better scalability and fault tolerance  
+
+---
+
+## 🎯 **Contributing**
+
+1. Fork the repository  
+2. Create a feature branch  
+3. Commit changes  
+4. Open a pull request  
+
+---
+
+## 📄 **License**
+
+This project is licensed under **MIT License**.
