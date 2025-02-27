@@ -3,7 +3,6 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { TokenModule } from './token/token.module';
 import { ConfigModule } from '@nestjs/config';
-import { RedisService } from './redis/redis.service';
 
 @Module({
     imports: [
@@ -11,6 +10,6 @@ import { RedisService } from './redis/redis.service';
         TokenModule
     ],
     controllers: [AppController],
-    providers: [AppService, RedisService]
+    providers: [AppService]
 })
 export class AppModule {}

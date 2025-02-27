@@ -9,8 +9,12 @@ import { Redis } from 'ioredis';
 @Injectable()
 export class RedisService implements OnModuleInit {
     private readonly redis: Redis;
+    private readonly pubSubClient: Redis;
     private readonly REDIS_PORT: number;
     private readonly REDIS_HOST: string;
+    private readonly KEYSPACE_EVENT_CONFIG_KEY: string;
+    private readonly KEYSPACE_EVENT_CONFIG_VALUE_EXPIRY: string;
+    private readonly KEYSPACE_EXPIRY_CHANNEL_NAME: string;
 
     /**
      * Initializes the RedisService with configuration settings.
@@ -22,6 +26,10 @@ export class RedisService implements OnModuleInit {
         this.REDIS_PORT = +this.configService.get('REDIS_PORT', 6379);
         this.REDIS_HOST = this.configService.get('REDIS_HOST', 'localhost');
         this.redis = new Redis(this.REDIS_PORT, this.REDIS_HOST);
+        this.pubSubClient = this.redis.duplicate();
+        this.KEYSPACE_EVENT_CONFIG_KEY = 'notify-keyspace-events';
+        this.KEYSPACE_EVENT_CONFIG_VALUE_EXPIRY = 'Ex';
+        this.KEYSPACE_EXPIRY_CHANNEL_NAME = '__keyevent@0__:expired';
     }
 
     /**
@@ -29,7 +37,7 @@ export class RedisService implements OnModuleInit {
      * Connects to the Redis instance.
      */
     async onModuleInit() {
-        await this.redis.connect();
+        // await this.redis.connect();
     }
 
     /**
@@ -41,12 +49,19 @@ export class RedisService implements OnModuleInit {
     }
 
     /**
-     * Sets the value of the given key to the given value.
-     * @param key The key to set.
-     * @param value The value to set the token to.
+     * Sets a key-value pair in Redis with an expiration time.
+     * The key will be automatically deleted after the specified number of seconds.
+     * @param key The key to set in Redis.
+     * @param value The value to associate with the key.
+     * @param seconds The expiration time in seconds.
+     * @returns A promise that resolves when the operation is complete.
      */
-    async set(key: string, value: string): Promise<void> {
-        await this.redis.set(key, value);
+    async setWithExpiry(
+        key: string,
+        value: string,
+        seconds: number
+    ): Promise<void> {
+        await this.redis.set(key, value, 'EX', seconds);
     }
 
     /**
@@ -159,5 +174,49 @@ export class RedisService implements OnModuleInit {
         ...members: (string | number | Buffer<ArrayBufferLike>)[]
     ): Promise<number> {
         return this.redis.srem(key, members);
+    }
+
+    /**
+     * Configures Redis to send a notification when a key expires.
+     * The notification is sent to the key expired event.
+     * @returns A promise that resolves when the configuration is complete.
+     */
+    async configureExpiryNotification(
+        channel: string,
+        _prefix: string | null = null
+    ): Promise<void> {
+        await this.redis.config(
+            'SET',
+            this.KEYSPACE_EVENT_CONFIG_KEY,
+            this.KEYSPACE_EVENT_CONFIG_VALUE_EXPIRY
+        );
+        await this.subscribe(this.KEYSPACE_EXPIRY_CHANNEL_NAME);
+
+        this.pubSubClient.on('message', (subChannel, key) => {
+            if (subChannel === this.KEYSPACE_EXPIRY_CHANNEL_NAME) {
+                if (_prefix === null || key.startsWith(_prefix)) {
+                    this.redis.publish(channel, key);
+                }
+            }
+        });
+    }
+
+    /**
+     * Subscribes to the given channel.
+     * @param channel The channel to subscribe to.
+     * @returns A promise that resolves when the subscription is complete.
+     */
+    async subscribe(channel: string): Promise<void> {
+        await this.pubSubClient.subscribe(channel);
+    }
+
+    /**
+     * Registers a callback for the given event.
+     * @param event The event to register the callback for.
+     * @param callback The callback to register.
+     * @returns A promise that resolves when the callback has been registered.
+     */
+    on(event: string, callback: (channel: string, key: string) => void): void {
+        this.pubSubClient.on(event, callback);
     }
 }

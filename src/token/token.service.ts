@@ -33,6 +33,24 @@ export class TokenService implements OnModuleInit {
      */
     private readonly MAX_TOKENS: number;
 
+    /**
+     * The lifetime in seconds after which a token is unblocked.
+     */
+    private readonly TOKEN_UNBLOCK_LIFETIME: number;
+
+    /**
+     * The prefix for all Redis keys representing tokens.
+     */
+    private readonly TOKEN_PREFIX: string;
+    /**
+     * The prefix for all Redis keys representing unblocked tokens.
+     */
+    private readonly TOKEN_UNBLOCK_PREFIX: string;
+    /**
+     * The Redis channel name for token unblock notifications.
+     */
+    private readonly TOKEN_UNBLOCK_CHANNEL: string;
+
     constructor(
         @Inject() private readonly redis: RedisService,
         private readonly configService: ConfigService
@@ -43,6 +61,13 @@ export class TokenService implements OnModuleInit {
             60 * 5
         ); // 5 minutes
         this.MAX_TOKENS = +this.configService.get('MAX_TOKENS', 10000); // 10000 tokens
+        this.TOKEN_UNBLOCK_LIFETIME = +this.configService.get(
+            'TOKEN_UNBLOCK_LIFETIME',
+            120
+        );
+        this.TOKEN_PREFIX = 'token:';
+        this.TOKEN_UNBLOCK_PREFIX = 'unblock:';
+        this.TOKEN_UNBLOCK_CHANNEL = 'token_unblocked';
     }
 
     /**
@@ -83,7 +108,10 @@ export class TokenService implements OnModuleInit {
             Date.now() + this.TOKEN_LIFETIME * 1000,
             token
         );
-        await this.redis.expire(`token:${token}`, this.TOKEN_LIFETIME);
+        await this.redis.expire(
+            `${this.TOKEN_PREFIX}${token}`,
+            this.TOKEN_LIFETIME
+        );
         return token;
     }
 
@@ -101,7 +129,10 @@ export class TokenService implements OnModuleInit {
             Date.now() + this.KEEP_ALIVE_LIMIT * 1000,
             token
         );
-        await this.redis.expire(`token:${token}`, this.KEEP_ALIVE_LIMIT);
+        await this.redis.expire(
+            `${this.TOKEN_PREFIX}${token}`,
+            this.KEEP_ALIVE_LIMIT
+        );
         return true;
     }
 
@@ -114,7 +145,11 @@ export class TokenService implements OnModuleInit {
         const removed = await this.redis.zrem(this.ACTIVE_TOKENS, token);
         if (removed === 0) return false;
 
-        await this.redis.sadd(this.TOKEN_POOL, token);
+        await this.redis.setWithExpiry(
+            `${this.TOKEN_UNBLOCK_PREFIX}${token}`,
+            token,
+            this.TOKEN_UNBLOCK_LIFETIME
+        );
         return true;
     }
 
@@ -126,7 +161,7 @@ export class TokenService implements OnModuleInit {
     async deleteToken(token: string): Promise<boolean> {
         await this.redis.zrem(this.ACTIVE_TOKENS, token);
         await this.redis.srem(this.TOKEN_POOL, token);
-        await this.redis.del(`token:${token}`);
+        await this.redis.del(`${this.TOKEN_PREFIX}${token}`);
         return true;
     }
 
@@ -142,6 +177,27 @@ export class TokenService implements OnModuleInit {
         if (expiredTokens.length === 0) return;
 
         await this.redis.zrem(this.ACTIVE_TOKENS, ...expiredTokens);
-        await this.redis.del(...expiredTokens.map((token) => `token:${token}`));
+        await this.redis.del(
+            ...expiredTokens.map((token) => `${this.TOKEN_PREFIX}${token}`)
+        );
+    }
+
+    /**
+     * Listens for token unblock notifications.
+     * When a token is unblocked, it is added back to the pool.
+     */
+    async listenForTokenUnblock() {
+        await this.redis.configureExpiryNotification(
+            this.TOKEN_UNBLOCK_CHANNEL,
+            this.TOKEN_UNBLOCK_PREFIX
+        );
+
+        await this.redis.subscribe(this.TOKEN_UNBLOCK_CHANNEL);
+        this.redis.on('message', async (channel, message) => {
+            if (channel == this.TOKEN_UNBLOCK_CHANNEL) {
+                const token = message.split(':')[1];
+                await this.redis.sadd(this.TOKEN_POOL, token);
+            }
+        });
     }
 }
