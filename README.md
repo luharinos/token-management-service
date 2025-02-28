@@ -53,7 +53,7 @@ This is a scalable **Token Management Service** built with **NestJS** and **Redi
 ### **1️⃣ Clone the Repository**
 
 ```sh
-git clone https://github.com/your-repo/token-management-service.git
+git clone https://github.com/luharinos/token-management-service.git
 cd token-management-service
 ```
 
@@ -68,10 +68,12 @@ yarn install
 Create a `.env` file in the root directory:
 
 ```ini
-PORT=3000
 REDIS_URL=redis://localhost:6379
-TOKEN_LIFETIME=60    # Tokens expire after 60s
-KEEP_ALIVE_LIMIT=300  # Keep-alive max timeout in seconds
+TOKEN_LIFETIME=60  # Token auto-expiry in seconds
+KEEP_ALIVE_LIMIT=300  # Keep-alive timeout in seconds
+MAX_TOKENS=10000  # Maximum tokens allowed in the pool
+TOKEN_UNBLOCK_LIFETIME=120  # Token unblock lifetime in seconds
+LOG_LEVEL=INFO
 ```
 
 ### **4️⃣ Start Redis Locally**
@@ -79,7 +81,7 @@ KEEP_ALIVE_LIMIT=300  # Keep-alive max timeout in seconds
 Ensure Redis is running locally:
 
 ```sh
-docker run -d --name redis -p 6379:6379 redis
+brew services start redis
 ```
 
 ### **5️⃣ Run the Application**
@@ -168,73 +170,6 @@ POST /tokens/keep-alive
 {
   "token": "abc123"
 }
-```
-
----
-
-## ⚙ **Deployment**
-
-### **🚀 Deploy with Docker**
-
-```sh
-docker build -t token-service .
-docker run -p 3000:3000 --env-file .env token-service
-```
-
-### **🚀 Deploy on Kubernetes**
-
-1️⃣ **Create Deployment YAML (`deployment.yaml`)**:
-
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: token-service
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: token-service
-  template:
-    metadata:
-      labels:
-        app: token-service
-    spec:
-      containers:
-      - name: token-service
-        image: token-service:latest
-        ports:
-        - containerPort: 3000
-        env:
-        - name: REDIS_URL
-          value: "redis://redis-cluster:6379"
-```
-
-2️⃣ **Apply the Kubernetes Deployment**
-
-```sh
-kubectl apply -f deployment.yaml
-```
-
-3️⃣ **Expose the Service**
-
-```yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: token-service
-spec:
-  type: LoadBalancer
-  selector:
-    app: token-service
-  ports:
-  - protocol: TCP
-    port: 80
-    targetPort: 3000
-```
-
-```sh
-kubectl apply -f service.yaml
 ```
 
 ---
