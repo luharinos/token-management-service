@@ -9,14 +9,19 @@ import { v4 as uuidv4 } from 'uuid';
 @Injectable()
 export class TokenService implements OnModuleInit {
     /**
+     * The key in Redis where all active tokens are stored.
+     */
+    private readonly ACTIVE_TOKENS = 'active_tokens';
+
+    /**
      * The key in Redis where all available tokens are stored.
      */
     private readonly TOKEN_POOL = 'token_pool';
 
     /**
-     * The key in Redis where all active tokens are stored.
+     * The interval for cleaning up expired tokens.
      */
-    private readonly ACTIVE_TOKENS = 'active_tokens';
+    private readonly TOKEN_CLEANUP_INTERVAL: number;
 
     /**
      * The lifetime of a token in seconds.
@@ -33,48 +38,31 @@ export class TokenService implements OnModuleInit {
      */
     private readonly MAX_TOKENS: number;
 
-    /**
-     * The lifetime in seconds after which a token is unblocked.
-     */
-    private readonly TOKEN_UNBLOCK_LIFETIME: number;
-
-    /**
-     * The prefix for all Redis keys representing tokens.
-     */
-    private readonly TOKEN_PREFIX: string;
-    /**
-     * The prefix for all Redis keys representing unblocked tokens.
-     */
-    private readonly TOKEN_UNBLOCK_PREFIX: string;
-    /**
-     * The Redis channel name for token unblock notifications.
-     */
-    private readonly TOKEN_UNBLOCK_CHANNEL: string;
-
     constructor(
         @Inject() private readonly redis: RedisService,
         private readonly configService: ConfigService
     ) {
-        this.TOKEN_LIFETIME = +this.configService.get('TOKEN_LIFETIME', 60); // 1 minute
+        // Initialize configuration values from the config service (in milli-seconds)
+        this.MAX_TOKENS = +this.configService.get('MAX_TOKENS', 10000); // 10,000 tokens
+        this.TOKEN_LIFETIME = +this.configService.get(
+            'TOKEN_LIFETIME',
+            60 * 1 * 1000
+        ); // 1 minute
         this.KEEP_ALIVE_LIMIT = +this.configService.get(
             'KEEP_ALIVE_LIMIT',
-            60 * 5
+            60 * 5 * 1000
         ); // 5 minutes
-        this.MAX_TOKENS = +this.configService.get('MAX_TOKENS', 10000); // 10000 tokens
-        this.TOKEN_UNBLOCK_LIFETIME = +this.configService.get(
-            'TOKEN_UNBLOCK_LIFETIME',
-            120
-        );
-        this.TOKEN_PREFIX = 'token:';
-        this.TOKEN_UNBLOCK_PREFIX = 'unblock:';
-        this.TOKEN_UNBLOCK_CHANNEL = 'token_unblocked';
+        this.TOKEN_CLEANUP_INTERVAL = +this.configService.get(
+            'TOKEN_CLEANUP_INTERVAL',
+            1 * 1000
+        ); // 1 second
     }
 
     /**
-     * Initializes the service.
+     * Initializes the service by setting up the token cleanup interval.
      */
     onModuleInit() {
-        console.log('TokenService has been initialized.');
+        setInterval(this.cleanupTokens.bind(this), this.TOKEN_CLEANUP_INTERVAL);
     }
 
     /**
@@ -83,15 +71,24 @@ export class TokenService implements OnModuleInit {
      * @returns An array of generated tokens.
      */
     async generateTokens(count: number): Promise<string[]> {
-        const currentCount = await this.redis.scard(this.TOKEN_POOL);
+        const currentCount = await this.redis.zcard(this.TOKEN_POOL);
+
+        // Check whether the new tokens exceed the maximum allowed
         if (currentCount + count > this.MAX_TOKENS) {
             throw new Error(
                 `Cannot generate more than ${this.MAX_TOKENS} tokens.`
             );
         }
 
+        // Generate new UUID tokens
         const tokens = Array.from({ length: count }, () => uuidv4());
-        await this.redis.sadd(this.TOKEN_POOL, ...tokens);
+        const score = Date.now() + this.KEEP_ALIVE_LIMIT * 1000;
+
+        // Prepare arguments for zaddBulk
+        const zaddArgs = tokens.flatMap((token) => [score, token]);
+
+        // Add tokens to the token pool with expiration scores
+        await this.redis.zaddBulk(this.TOKEN_POOL, ...zaddArgs);
         return tokens;
     }
 
@@ -100,18 +97,17 @@ export class TokenService implements OnModuleInit {
      * @returns The assigned token, or null if no token is available.
      */
     async assignToken(): Promise<string | null> {
-        const token = await this.redis.spop(this.TOKEN_POOL);
+        // Pop a token from the pool
+        const token = await this.redis.zpopmin(this.TOKEN_POOL);
         if (!token) return null;
 
+        // Add the token to active tokens with a new expiration time
         await this.redis.zadd(
             this.ACTIVE_TOKENS,
             Date.now() + this.TOKEN_LIFETIME * 1000,
             token
         );
-        await this.redis.expire(
-            `${this.TOKEN_PREFIX}${token}`,
-            this.TOKEN_LIFETIME
-        );
+
         return token;
     }
 
@@ -121,18 +117,30 @@ export class TokenService implements OnModuleInit {
      * @returns True if the token was kept alive, false otherwise.
      */
     async keepAlive(token: string): Promise<boolean> {
-        const score = await this.redis.zscore(this.ACTIVE_TOKENS, token);
-        if (!score) return false;
+        // Check if token is active
+        let score = await this.redis.zscore(this.ACTIVE_TOKENS, token);
 
-        await this.redis.zadd(
-            this.ACTIVE_TOKENS,
-            Date.now() + this.KEEP_ALIVE_LIMIT * 1000,
-            token
-        );
-        await this.redis.expire(
-            `${this.TOKEN_PREFIX}${token}`,
-            this.KEEP_ALIVE_LIMIT
-        );
+        if (score) {
+            // Extend token's lifetime
+            await this.redis.zadd(
+                this.ACTIVE_TOKENS,
+                Date.now() + this.TOKEN_LIFETIME * 1000,
+                token
+            );
+            return true;
+        } else {
+            // Check if token is in the pool
+            score = await this.redis.zscore(this.TOKEN_POOL, token);
+            if (!score) return false;
+
+            // Extend token's lifetime in the pool
+            await this.redis.zadd(
+                this.TOKEN_POOL,
+                Date.now() + this.KEEP_ALIVE_LIMIT * 1000,
+                token
+            );
+        }
+
         return true;
     }
 
@@ -142,62 +150,57 @@ export class TokenService implements OnModuleInit {
      * @returns True if the token was unblocked, false otherwise.
      */
     async unblockToken(token: string): Promise<boolean> {
+        // Remove the token from active tokens
         const removed = await this.redis.zrem(this.ACTIVE_TOKENS, token);
         if (removed === 0) return false;
 
-        await this.redis.setWithExpiry(
-            `${this.TOKEN_UNBLOCK_PREFIX}${token}`,
-            token,
-            this.TOKEN_UNBLOCK_LIFETIME
+        // Add the token back to the pool
+        await this.redis.zadd(
+            this.TOKEN_POOL,
+            Date.now() + this.KEEP_ALIVE_LIMIT * 1000,
+            token
         );
+
         return true;
     }
 
     /**
-     * Deletes a token.
+     * Deletes a token from both active tokens and the pool.
      * @param token The token to delete.
      * @returns True if the token was deleted, false otherwise.
      */
     async deleteToken(token: string): Promise<boolean> {
         await this.redis.zrem(this.ACTIVE_TOKENS, token);
-        await this.redis.srem(this.TOKEN_POOL, token);
-        await this.redis.del(`${this.TOKEN_PREFIX}${token}`);
+        await this.redis.zrem(this.TOKEN_POOL, token);
+
         return true;
     }
 
     /**
-     * Cleans up expired tokens.
+     * Cleans up expired tokens by removing them from active tokens
+     * and adding them back to the pool.
      */
     private async cleanupTokens() {
-        const expiredTokens = await this.redis.zrangebyscore(
+        // Fetch expired active tokens
+        const expiredActiveTokens = await this.redis.zrangebyscore(
             this.ACTIVE_TOKENS,
             0,
             Date.now()
         );
-        if (expiredTokens.length === 0) return;
 
-        await this.redis.zrem(this.ACTIVE_TOKENS, ...expiredTokens);
-        await this.redis.del(
-            ...expiredTokens.map((token) => `${this.TOKEN_PREFIX}${token}`)
-        );
-    }
+        if (expiredActiveTokens.length > 0) {
+            // Remove expired active tokens
+            await this.redis.zrem(this.ACTIVE_TOKENS, ...expiredActiveTokens);
 
-    /**
-     * Listens for token unblock notifications.
-     * When a token is unblocked, it is added back to the pool.
-     */
-    async listenForTokenUnblock() {
-        await this.redis.configureExpiryNotification(
-            this.TOKEN_UNBLOCK_CHANNEL,
-            this.TOKEN_UNBLOCK_PREFIX
-        );
+            // Add expired tokens back to the pool with new expiration scores
+            const poolInsertArgs = expiredActiveTokens.flatMap((token) => [
+                Date.now() + this.KEEP_ALIVE_LIMIT * 1000,
+                token
+            ]);
+            await this.redis.zaddBulk(this.TOKEN_POOL, ...poolInsertArgs);
+        }
 
-        await this.redis.subscribe(this.TOKEN_UNBLOCK_CHANNEL);
-        this.redis.on('message', async (channel, message) => {
-            if (channel == this.TOKEN_UNBLOCK_CHANNEL) {
-                const token = message.split(':')[1];
-                await this.redis.sadd(this.TOKEN_POOL, token);
-            }
-        });
+        // Remove expired tokens from the pool
+        await this.redis.zremrangebyscore(this.TOKEN_POOL, 0, Date.now());
     }
 }
