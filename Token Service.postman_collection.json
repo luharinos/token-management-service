@@ -1,0 +1,172 @@
+{
+	"info": {
+		"_postman_id": "a2b90293-cc3b-45f2-9e73-31a24b164779",
+		"name": "Token Service",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "10767546",
+		"_collection_link": "https://zee5-search-reco.postman.co/workspace/Search-and-Reco-Workspace~573fda22-66d2-47dc-8f3a-995cd3424cad/collection/10767546-a2b90293-cc3b-45f2-9e73-31a24b164779?action=share&source=collection_link&creator=10767546"
+	},
+	"item": [
+		{
+			"name": "Generate Tokens",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\"count\": 10}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:3000/token/generate",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "3000",
+					"path": [
+						"token",
+						"generate"
+					]
+				},
+				"description": "Generated from cURL: curl --request POST 'http://localhost:3000/tokens/generate' \\\n     --header 'Content-Type: application/json' \\\n     --data '{\"count\": 10}'\n"
+			},
+			"response": []
+		},
+		{
+			"name": "Assign Token",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:3000/token/assign",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "3000",
+					"path": [
+						"token",
+						"assign"
+					]
+				},
+				"description": "Generated from cURL: curl --request POST 'http://localhost:3000/tokens/assign'\n"
+			},
+			"response": []
+		},
+		{
+			"name": "Unblock Token",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\"token\": \"b1f15566-3bbe-4ea8-a70f-de58a9322f3e\"}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:3000/token/unblock",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "3000",
+					"path": [
+						"token",
+						"unblock"
+					]
+				},
+				"description": "Generated from cURL: curl --request POST 'http://localhost:3000/tokens/unblock' \\\n     --header 'Content-Type: application/json' \\\n     --data '{\"token\": \"f9b1-3d3d\"}'\n"
+			},
+			"response": []
+		},
+		{
+			"name": "Delete Token",
+			"request": {
+				"method": "DELETE",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\"token\": \"d98a2728-83b4-4c2c-bc26-def526759820\"}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:3000/token/delete",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "3000",
+					"path": [
+						"token",
+						"delete"
+					]
+				},
+				"description": "Generated from cURL: curl --request DELETE 'http://localhost:3000/tokens/delete' \\\n     --header 'Content-Type: application/json' \\\n     --data '{\"token\": \"f9b1-3d3d\"}'\n"
+			},
+			"response": []
+		},
+		{
+			"name": "Keep Token Alive",
+			"request": {
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\"token\": \"933a3df7-ece9-41cd-b753-420cdc9fd273\"}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:3000/token/keep-alive",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "3000",
+					"path": [
+						"token",
+						"keep-alive"
+					]
+				},
+				"description": "Generated from cURL: curl --request POST 'http://localhost:3000/tokens/keep-alive' \\\n     --header 'Content-Type: application/json' \\\n     --data '{\"token\": \"f9b1-3d3d\"}'\n"
+			},
+			"response": []
+		}
+	]
+}
