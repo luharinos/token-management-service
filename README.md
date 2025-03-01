@@ -7,8 +7,7 @@ This is a scalable **Token Management Service** built with **NestJS** and **Redi
 ### 🎯 **Key Features**
 
 ✅ Assigns unique tokens dynamically with **O(1) operations**  
-✅ Supports **multi-instance deployments** using **Redis Pub/Sub**  
-✅ Implements **event-driven token unblocking after 2 minutes**  
+✅ Supports **multi-instance deployments** using **Redis Atomic Operations**  
 ✅ Ensures **scalability and consistency** across multiple application pods  
 ✅ Deployable in **Docker & Kubernetes** environments  
 
@@ -20,7 +19,6 @@ This is a scalable **Token Management Service** built with **NestJS** and **Redi
 |----------------|--------------|
 | **Backend**    | NestJS (TypeScript) |
 | **Database**   | Redis (Atomic Operations, Pub/Sub) |
-| **Event Bus**  | Redis Pub/Sub (Token Expiry) |
 | **Containerization** | Docker & Kubernetes |
 | **Monitoring** | Prometheus & Grafana |
 | **Load Balancer** | NGINX / Kubernetes Service |
@@ -30,21 +28,39 @@ This is a scalable **Token Management Service** built with **NestJS** and **Redi
 ## 🏗️ **System Architecture**
 
 ```
-        ┌────────────────────────────────┐
-        │      API Gateway (NestJS)      │
-        ├────────────────────────────────┤
-        │      Token Service (NestJS)    │
-        │  ┌─────────────────────────┐   │
-        │  │     Redis Database      │   │
-        │  │  - Token Storage        │   │
-        │  │  - Auto-Expiry Handling │   │
-        │  │  - Pub/Sub Notifications│   │
-        │  └─────────────────────────┘   │
-        ├────────────────────────────────┤
-        │        Other Services          │
-        │  (Auth, Logging, Monitoring)   │
-        └────────────────────────────────┘
+        ┌─────────────────────────────────────┐
+        │          API Gateway (NestJS)       │
+        ├─────────────────────────────────────┤
+        │         Token Service (NestJS)      │
+        │     ┌─────────────────────────┐     │
+        │     │     Redis Database      │     │
+        │     │  - Token Storage        │     │
+        │     │  - Auto-Expiry Handling │     │
+        │     └─────────────────────────┘     │
+        ├─────────────────────────────────────┤
+        │     **Design Patterns Used:**       │
+        │ - Factory Pattern (Token Service)   │
+        │ - Singleton (Logger, Config, Redis) │
+        │ - Repository Pattern (Redis Access) │
+        └─────────────────────────────────────┘
 ```
+
+---
+
+## 📖 **Key Design Decisions**
+
+✅ Redis Sorted Sets (ZSET) for Token Storage → Allows O(log N) insertions & retrievals.
+✅ Factory Pattern for Token Service → Standardized token creation & assignment.
+✅ Singleton Pattern for Logger, Config, and Redis Connection → Ensures a single instance across the application.
+✅ Repository Pattern for Redis Interactions → Abstracts direct Redis operations from business logic.
+✅ Auto-Cleanup Jobs → Keeps the token pool optimized without manual intervention.
+✅ Microservice Architecture → Supports horizontal scaling with multiple API instances.
+
+---
+
+## 💭 **Logical Flow**
+
+![Token Lifecycle](image.png)
 
 ---
 
@@ -177,7 +193,6 @@ POST /tokens/keep-alive
 ## 🎯 **Scaling Strategy**
 
 ✅ **Redis Atomic Operations** → Prevents race conditions  
-✅ **Redis Pub/Sub** → Ensures event-driven consistency  
 ✅ **Kubernetes Auto-Scaling** → Deploys multiple instances as needed  
 
 ---
