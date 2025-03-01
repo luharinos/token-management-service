@@ -2,6 +2,7 @@ import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { RedisService } from '../redis/redis.service';
 import { v4 as uuidv4 } from 'uuid';
+import { AppLogger } from 'src/logger/logger.service';
 
 /**
  * Service responsible for managing tokens.
@@ -40,8 +41,11 @@ export class TokenService implements OnModuleInit {
 
     constructor(
         @Inject() private readonly redis: RedisService,
-        private readonly configService: ConfigService
+        private readonly configService: ConfigService,
+        private readonly logger: AppLogger
     ) {
+        this.logger.setContext(TokenService.name);
+
         // Initialize configuration values from the config service (in milli-seconds)
         this.MAX_TOKENS = +this.configService.get('MAX_TOKENS', 10000); // 10,000 tokens
         this.TOKEN_LIFETIME = +this.configService.get(
@@ -62,6 +66,7 @@ export class TokenService implements OnModuleInit {
      * Initializes the service by setting up the token cleanup interval.
      */
     onModuleInit() {
+        this.logger.debug('Initializing token service');
         setInterval(this.cleanupTokens.bind(this), this.TOKEN_CLEANUP_INTERVAL);
     }
 
@@ -71,10 +76,15 @@ export class TokenService implements OnModuleInit {
      * @returns An array of generated tokens.
      */
     async generateTokens(count: number): Promise<string[]> {
+        this.logger.debug(`Generating ${count} new tokens`);
+
         const currentCount = await this.redis.zcard(this.TOKEN_POOL);
 
         // Check whether the new tokens exceed the maximum allowed
         if (currentCount + count > this.MAX_TOKENS) {
+            this.logger.warn(
+                `Cannot generate more than ${this.MAX_TOKENS} tokens.`
+            );
             throw new Error(
                 `Cannot generate more than ${this.MAX_TOKENS} tokens.`
             );
@@ -89,6 +99,7 @@ export class TokenService implements OnModuleInit {
 
         // Add tokens to the token pool with expiration scores
         await this.redis.zaddBulk(this.TOKEN_POOL, ...zaddArgs);
+        this.logger.log(`Generated ${count} new tokens`);
         return tokens;
     }
 
@@ -97,9 +108,14 @@ export class TokenService implements OnModuleInit {
      * @returns The assigned token, or null if no token is available.
      */
     async assignToken(): Promise<string | null> {
+        this.logger.debug('Assigning a new token');
+
         // Pop a token from the pool
         const token = await this.redis.zpopmin(this.TOKEN_POOL);
-        if (!token) return null;
+        if (!token) {
+            this.logger.warn('No tokens are available in the pool');
+            return null;
+        }
 
         // Add the token to active tokens with a new expiration time
         await this.redis.zadd(
@@ -107,7 +123,7 @@ export class TokenService implements OnModuleInit {
             Date.now() + this.TOKEN_LIFETIME * 1000,
             token
         );
-
+        this.logger.log(`Assigned token ${token}`);
         return token;
     }
 
@@ -117,6 +133,8 @@ export class TokenService implements OnModuleInit {
      * @returns True if the token was kept alive, false otherwise.
      */
     async keepAlive(token: string): Promise<boolean> {
+        this.logger.debug(`Keeping token ${token} alive`);
+
         // Check if token is active
         let score = await this.redis.zscore(this.ACTIVE_TOKENS, token);
 
@@ -127,11 +145,15 @@ export class TokenService implements OnModuleInit {
                 Date.now() + this.TOKEN_LIFETIME * 1000,
                 token
             );
+            this.logger.log(`Kept token ${token} alive`);
             return true;
         } else {
             // Check if token is in the pool
             score = await this.redis.zscore(this.TOKEN_POOL, token);
-            if (!score) return false;
+            if (!score) {
+                this.logger.warn(`Token ${token} is not available`);
+                return false;
+            }
 
             // Extend token's lifetime in the pool
             await this.redis.zadd(
@@ -139,6 +161,7 @@ export class TokenService implements OnModuleInit {
                 Date.now() + this.KEEP_ALIVE_LIMIT * 1000,
                 token
             );
+            this.logger.log(`Kept token ${token} alive in the pool`);
         }
 
         return true;
@@ -150,9 +173,14 @@ export class TokenService implements OnModuleInit {
      * @returns True if the token was unblocked, false otherwise.
      */
     async unblockToken(token: string): Promise<boolean> {
+        this.logger.debug(`Unblocking token ${token}`);
+
         // Remove the token from active tokens
         const removed = await this.redis.zrem(this.ACTIVE_TOKENS, token);
-        if (removed === 0) return false;
+        if (removed === 0) {
+            this.logger.warn(`Token ${token} is not active`);
+            return false;
+        }
 
         // Add the token back to the pool
         await this.redis.zadd(
@@ -160,7 +188,7 @@ export class TokenService implements OnModuleInit {
             Date.now() + this.KEEP_ALIVE_LIMIT * 1000,
             token
         );
-
+        this.logger.log(`Unblocked token ${token}`);
         return true;
     }
 
@@ -170,9 +198,12 @@ export class TokenService implements OnModuleInit {
      * @returns True if the token was deleted, false otherwise.
      */
     async deleteToken(token: string): Promise<boolean> {
+        this.logger.debug(`Deleting token ${token}`);
+
         await this.redis.zrem(this.ACTIVE_TOKENS, token);
         await this.redis.zrem(this.TOKEN_POOL, token);
 
+        this.logger.log(`Deleted token ${token}`);
         return true;
     }
 
@@ -181,6 +212,8 @@ export class TokenService implements OnModuleInit {
      * and adding them back to the pool.
      */
     private async cleanupTokens() {
+        this.logger.debug('Cleaning up expired tokens');
+
         // Fetch expired active tokens
         const expiredActiveTokens = await this.redis.zrangebyscore(
             this.ACTIVE_TOKENS,
@@ -202,5 +235,6 @@ export class TokenService implements OnModuleInit {
 
         // Remove expired tokens from the pool
         await this.redis.zremrangebyscore(this.TOKEN_POOL, 0, Date.now());
+        this.logger.debug('Cleaned up expired tokens');
     }
 }

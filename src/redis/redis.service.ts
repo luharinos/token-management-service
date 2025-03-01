@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Redis } from 'ioredis';
+import { AppLogger } from 'src/logger/logger.service';
 
 /**
  * RedisService provides a simple interface for interacting with the Redis database.
@@ -16,10 +17,14 @@ export class RedisService {
      * It retrieves the Redis connection details (port and host) from the configuration service.
      * @param configService The service used to fetch configuration settings for Redis.
      */
-    constructor(private readonly configService: ConfigService) {
+    constructor(
+        private readonly configService: ConfigService,
+        private readonly logger: AppLogger
+    ) {
         this.REDIS_PORT = +this.configService.get('REDIS_PORT', 6379);
         this.REDIS_HOST = this.configService.get('REDIS_HOST', 'localhost');
         this.redis = new Redis(this.REDIS_PORT, this.REDIS_HOST);
+        this.logger.setContext(RedisService.name);
     }
 
     /**
@@ -30,6 +35,9 @@ export class RedisService {
      * @returns The number of members added to the set (excluding existing members with updated scores).
      */
     async zadd(key: string, score: number, member: string): Promise<number> {
+        this.logger.debug(
+            `Adding member ${member} with score ${score} to set ${key}`
+        );
         return this.redis.zadd(key, score, member);
     }
 
@@ -43,6 +51,7 @@ export class RedisService {
         key: string,
         ...args: (string | number | Buffer<ArrayBufferLike>)[]
     ): Promise<number> {
+        this.logger.debug(`Adding multiple members to set ${key}`);
         return this.redis.zadd(key, ...args);
     }
 
@@ -52,6 +61,7 @@ export class RedisService {
      * @returns The total count of elements in the sorted set.
      */
     async zcard(key: string): Promise<number> {
+        this.logger.debug(`Retrieving count of elements in set ${key}`);
         return this.redis.zcard(key);
     }
 
@@ -61,6 +71,7 @@ export class RedisService {
      * @returns The member with the lowest score, or null if the set is empty.
      */
     async zpopmin(key: string): Promise<string | null> {
+        this.logger.debug(`Popping member with lowest score from set ${key}`);
         const result = await this.redis.zpopmin(key, 1);
         if (!result || result.length === 0) {
             return null;
@@ -75,7 +86,8 @@ export class RedisService {
      * @param stop The ending index for the range.
      * @returns An array of members within the specified index range.
      */
-    zrange(key: string, start: number, stop: number): Promise<string[]> {
+    async zrange(key: string, start: number, stop: number): Promise<string[]> {
+        this.logger.debug(`Retrieving range of elements from set ${key}`);
         return this.redis.zrange(key, start, stop);
     }
 
@@ -91,6 +103,9 @@ export class RedisService {
         min: number | string,
         max: number | string
     ): Promise<string[]> {
+        this.logger.debug(
+            `Retrieving range of elements from set ${key} with scores between ${min} and ${max}`
+        );
         return this.redis.zrangebyscore(key, min, max);
     }
 
@@ -104,6 +119,7 @@ export class RedisService {
         key: string,
         ...members: (string | number | Buffer<ArrayBufferLike>)[]
     ): Promise<number> {
+        this.logger.debug(`Removing members from set ${key}`);
         return this.redis.zrem(key, members);
     }
 
@@ -119,6 +135,9 @@ export class RedisService {
         min: number | string,
         max: number | string
     ): Promise<number> {
+        this.logger.debug(
+            `Removing members from set ${key} with scores between ${min} and ${max}`
+        );
         return this.redis.zremrangebyscore(key, min, max);
     }
 
@@ -129,6 +148,9 @@ export class RedisService {
      * @returns The score of the member, or null if the member does not exist.
      */
     async zscore(key: string, member: string): Promise<string | null> {
+        this.logger.debug(
+            `Retrieving score for member ${member} from set ${key}`
+        );
         return this.redis.zscore(key, member);
     }
 }

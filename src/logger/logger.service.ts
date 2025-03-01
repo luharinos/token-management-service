@@ -4,9 +4,11 @@ import * as winston from 'winston';
 
 @Injectable()
 export class AppLogger implements LoggerService {
+    private context: string;
     private readonly logger: winston.Logger;
 
     constructor(private readonly configService: ConfigService) {
+        this.context = 'App';
         this.logger = winston.createLogger({
             level: this.configService.get('LOG_LEVEL', 'INFO').toLowerCase(),
             format: winston.format.combine(
@@ -20,21 +22,25 @@ export class AppLogger implements LoggerService {
         });
     }
 
-    log(message: string, context = 'App') {
-        this.logger.info(`[${context}] ${message}`);
+    setContext(context: string) {
+        this.context = context;
     }
 
-    error(message: string, trace?: string, context = 'App') {
+    log(message: string) {
+        this.logger.info(`[${this.context}] ${message}`);
+    }
+
+    error(message: string, trace?: string) {
         this.logger.error(
-            `[${context}] ${message} ${trace ? '| ' + trace : ''}`
+            `[${this.context}] ${message} ${trace ? '| ' + trace : ''}`
         );
     }
 
-    warn(message: string, context = 'App') {
-        this.logger.warn(`[${context}] ${message}`);
+    warn(message: string) {
+        this.logger.warn(`[${this.context}] ${message}`);
     }
 
-    debug(message: string, context = 'App') {
-        this.logger.debug(`[${context}] ${message}`);
+    debug(message: string) {
+        this.logger.debug(`[${this.context}] ${message}`);
     }
 }

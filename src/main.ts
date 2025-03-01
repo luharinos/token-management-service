@@ -6,6 +6,7 @@ import { GlobalExceptionFilter } from './common/http-exception.filter';
 async function bootstrap() {
     const app = await NestFactory.create(AppModule, { logger: false });
     const logger = app.get(AppLogger);
+    // logger.setContext('Bootstrap');
 
     app.useGlobalFilters(new GlobalExceptionFilter(logger));
 
